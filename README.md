@@ -22,7 +22,7 @@
 ├── main.tf                 # S3 + CloudFront + OAI + バケットポリシー のTerraformコード
 ├── acm_route53.tf          # ACM証明書取得（DNS検証）および Route53 Alias レコード のTerraformコード
 ├── variables.tf            # 変数定義
-├── terraform.tfvars        # 必要に応じた値の上書き（非公開情報は格納しないこと）
+├── terraform.tfvars        # 変数に値を設定（環境ごとに上書き可能）
 ├── .gitignore              # Terraform状態ファイルなどを除外設定
 └── README.md               # このファイル
 ```
@@ -35,11 +35,22 @@ git clone https://github.com/donblancco/aws-terraform.git
 cd aws-terraform
 ```
 
+### 1.5. 変数の設定
+`terraform.tfvars` ファイルに環境ごとの変数値を設定してください。例:
+```
+aws_region                        = "ap-northeast-1"
+bucket_name                       = "ソースコードを配置したバケット名"
+domain_name                       = "don-blanc-co.com"
+alternate_domain_name             = "www.don-blanc-co.com"
+certificate_subject_alternative_names = ["www.don-blanc-co.com"]
+```
+
 ### 2. Terraform の初期化
 Terraform プロジェクトを初期化して、必要なプロバイダプラグインをダウンロードします。
 ```bash
 terraform init
 ```
+変数は `variables.tf` と `terraform.tfvars` を使って管理されています。
 
 
 ### 3. Terraform の実行
