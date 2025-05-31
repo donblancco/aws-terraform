@@ -5,13 +5,13 @@ provider "aws" {
 }
 
 resource "aws_route53_zone" "primary" {
-  name = "don-blanc-co.com"
+  name = var.domain_name
 }
 
 resource "aws_acm_certificate" "cert" {
   provider                  = aws.use1
-  domain_name               = "don-blanc-co.com"
-  subject_alternative_names = ["www.don-blanc-co.com"]
+  domain_name               = var.domain_name
+  subject_alternative_names = var.certificate_subject_alternative_names
   validation_method         = "DNS"
 }
 
@@ -41,7 +41,7 @@ resource "aws_acm_certificate_validation" "cert_validation" {
 
 resource "aws_route53_record" "alias_root" {
   zone_id = aws_route53_zone.primary.zone_id
-  name    = "don-blanc-co.com"
+  name    = var.domain_name
   type    = "A"
 
   alias {
@@ -53,7 +53,7 @@ resource "aws_route53_record" "alias_root" {
 
 resource "aws_route53_record" "alias_www" {
   zone_id = aws_route53_zone.primary.zone_id
-  name    = "www.don-blanc-co.com"
+  name    = var.alternate_domain_name
   type    = "A"
 
   alias {

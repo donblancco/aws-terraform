@@ -1,9 +1,9 @@
 provider "aws" {
-  region = "ap-northeast-1"
+  region = var.aws_region
 }
 
 resource "aws_s3_bucket" "site_bucket" {
-  bucket = "donblancco-sideproject-site"
+  bucket = var.bucket_name
 
   website {
     index_document = "index.html"
@@ -45,7 +45,7 @@ resource "aws_cloudfront_origin_access_identity" "oai" {
 }
 
 resource "aws_cloudfront_distribution" "cdn" {
-  aliases = ["don-blanc-co.com", "www.don-blanc-co.com"]
+  aliases = compact([var.domain_name, var.alternate_domain_name])
 
   origin {
     domain_name = aws_s3_bucket.site_bucket.bucket_regional_domain_name
