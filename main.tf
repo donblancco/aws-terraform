@@ -1,12 +1,9 @@
-
-
 provider "aws" {
   region = "ap-northeast-1"
 }
 
 resource "aws_s3_bucket" "site_bucket" {
-  bucket = "couple-sideproject-site"
-  acl    = "public-read"
+  bucket = "donblancco-sideproject-site"
 
   website {
     index_document = "index.html"
@@ -14,15 +11,28 @@ resource "aws_s3_bucket" "site_bucket" {
   }
 }
 
-resource "aws_s3_bucket_policy" "site_policy" {
+resource "aws_s3_bucket_public_access_block" "block_public" {
   bucket = aws_s3_bucket.site_bucket.id
+
+  block_public_acls       = true
+  block_public_policy     = false
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_policy" "site_policy" {
+  bucket     = aws_s3_bucket.site_bucket.id
+  depends_on = [aws_s3_bucket_public_access_block.block_public]
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
         Sid       = "PublicReadGetObject"
         Effect    = "Allow"
-        Principal = "*"
+        Principal = {
+          "AWS" = aws_cloudfront_origin_access_identity.oai.iam_arn
+        }
         Action    = ["s3:GetObject"]
         Resource  = ["${aws_s3_bucket.site_bucket.arn}/*"]
       }
@@ -31,19 +41,12 @@ resource "aws_s3_bucket_policy" "site_policy" {
 }
 
 resource "aws_cloudfront_origin_access_identity" "oai" {
-  comment = "OAI for couple-sideproject-site"
-}
-
-resource "aws_s3_bucket_public_access_block" "block_public" {
-  bucket = aws_s3_bucket.site_bucket.id
-
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
+  comment = "OAI for donblancco-sideproject-site"
 }
 
 resource "aws_cloudfront_distribution" "cdn" {
+  aliases = ["don-blanc-co.com", "www.don-blanc-co.com"]
+
   origin {
     domain_name = aws_s3_bucket.site_bucket.bucket_regional_domain_name
     origin_id   = "S3-${aws_s3_bucket.site_bucket.id}"
@@ -73,7 +76,9 @@ resource "aws_cloudfront_distribution" "cdn" {
   }
 
   viewer_certificate {
-    cloudfront_default_certificate = true
+    acm_certificate_arn      = aws_acm_certificate.cert.arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
   }
 
   restrictions {
@@ -83,7 +88,7 @@ resource "aws_cloudfront_distribution" "cdn" {
   }
 
   tags = {
-    Name = "CoupleSideprojectCDN"
+    Name = "donblanccoSideprojectCDN"
   }
 }
 

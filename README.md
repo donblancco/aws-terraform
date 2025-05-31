@@ -1,19 +1,31 @@
 # aws-terraform
 
-このリポジトリには、donblanccoのWebサイトをホスティングするためのAWS基盤（S3 + CloudFront）をTerraformで構築するコードが含まれています。
+このリポジトリには、don-blanc-co.com ドメインを使ってWebサイトをホスティングするためのAWS基盤（S3 + CloudFront + ACM + Route 53）をTerraformで構築するコードが含まれています。
 
 ## 構成概要
-- **S3バケット**：静的ウェブサイトホスティング
-- **CloudFront**：CDN、およびHTTPSリダイレクト設定
-- **OAI (Origin Access Identity)**：CloudFront経由のみでS3にアクセスさせるためのセキュリティ制御
-- **バケットポリシー**：公開読み取り権限を付与
-- **パブリックアクセスブロック**：S3バケットへの直接アクセスを制限
+- **S3バケット**：Reactアプリ（build ディレクトリ）の静的ホスティング、およびポートフォリオ用静的サイトのホスティング
+- **CloudFront**：CDN（コンテンツ配信）＋HTTPS化(ACM証明書)＋OAIによるアクセス制御
+- **ACM (AWS Certificate Manager)**：don-blanc-co.com および www.don-blanc-co.com で使用するSSL/TLS証明書の取得（DNS検証）
+- **Route 53**：ドメインのホストゾーン管理およびCloudFrontへのAliasレコード登録
+- **バケットポリシー**：CloudFront OAIからのみS3コンテンツを取得できるように制限
+- **パブリックアクセスブロック**：S3バケットへの直接アクセスを最小限にする制御
 
 ## 前提条件
 1. **Terraform** (v1.x 以上) がインストール済みであること
 2. **AWS CLI** の設定が完了しており、デフォルトリージョンが `ap-northeast-1` に設定されていること
-3. AWSアカウントに対して `terraform apply` 実行可能なアクセス権限を持つIAMユーザーまたはロールを使用していること
-4. リポジトリをクローン済みであること（以下の手順を参照）
+3. Terraform 用 IAM ユーザー(`terraform-user`)に適切な権限が付与されていること
+4. ドメイン を取得済みであること
+
+## ディレクトリ構成
+```
+.
+├── main.tf                 # S3 + CloudFront + OAI + バケットポリシー のTerraformコード
+├── acm_route53.tf          # ACM証明書取得（DNS検証）および Route53 Alias レコード のTerraformコード
+├── variables.tf            # 変数定義
+├── terraform.tfvars        # 必要に応じた値の上書き（非公開情報は格納しないこと）
+├── .gitignore              # Terraform状態ファイルなどを除外設定
+└── README.md               # このファイル
+```
 
 ## 使用方法
 
@@ -29,40 +41,40 @@ Terraform プロジェクトを初期化して、必要なプロバイダプラ�
 terraform init
 ```
 
-### 3. プランの確認
-実際にAWSに適用される変更内容を確認します。
-```bash
-terraform plan
-```
 
-### 4. インフラの作成
-プランを確認後、以下コマンドでインフラを作成します。
-対話形式で `yes` と入力するとリソースが作成されます。
+### 3. Terraform の実行
+以下を実行して AWS インフラを一気に構築します。
+
 ```bash
 terraform apply
 ```
+Terraform は以下を順に実行します：
+1. **S3バケット作成**
+2. **Public Access Block + バケットポリシー設定**
+3. **CloudFront OAI 作成**
+4. **ACM証明書リクエスト（DNS検証用CNAMEレコード自動登録）**
+5. **DNS検証完了後に ACM 証明書発行**
+6. **CloudFrontデフォルトディストリビューションにACM証明書とAliasを設定**
+7. **Route 53 に Aレコード（Alias）で CloudFront を向ける**
 
-### 5. 出力されたサイトURLの確認
-リソース作成後、下記コマンドでCloudFrontディストリビューションのドメイン名（サイトURL）を取得できます。
+以上が完了すると、`don-blanc-co.com` および `www.don-blanc-co.com` で HTTPS 接続が有効なWebサイトが公開されます。
+
+
+### 4. 出力されたサイトURLの確認
+Terraform 実行後、以下コマンドで CloudFront のドメイン名を確認できます。
+
 ```bash
 terraform output site_url
 ```
-
 例:
 ```
-d1234abcdef8.cloudfront.net
+dkz59juhsa6rl.cloudfront.net
 ```
+しばらく待つと、`https://don-blanc-co.com/` が 配信するようになります。
 
-### 6. 静的コンテンツのデプロイ
-静的サイトのコンテンツ（例: `index.html`, `error.html`, CSS/JSファイルなど）をローカルで用意し、以下コマンドでS3バケットに同期します。
-```bash
-aws s3 sync ./site-content s3://couple-sideproject-site
-```
-- `site-content` フォルダを作成して、静的ファイルを配置してください。
-- S3バケット名（デフォルト: `couple-sideproject-site`）は必要に応じて `main.tf` 内で変更し、同時にコマンド内でも適切に置き換えてください。
+### 5. 後片付け (リソース削除)
+テスト目的や不要になった場合は、以下のコマンドで作成した AWS リソースをすべて削除できます。
 
-### 7. 後片付け (リソース削除)
-テスト目的や不要になった場合は、以下のコマンドで作成したAWSリソースをすべて削除できます。
 ```bash
 terraform destroy
 ```
@@ -70,22 +82,19 @@ terraform destroy
 
 ## カスタマイズ例
 - バケット名やリージョンを変更したい場合は、`main.tf` 内の `bucket` パラメータや `provider "aws"` の `region` を編集してください。
-- CloudFront のビヘイビア設定やキャッシュポリシーを変更する場合は、`aws_cloudfront_distribution` リソースブロックを調整します。
+- CloudFront のビヘイビア設定やキャッシュポリシーを変更する場合は、`aws_cloudfront_distribution` リソースブロックを調整。
+- React とポートフォリオの両方を同一バケット内でホスティングする場合は、CloudFront の `ordered_cache_behavior` でパスごとにオリジンを切り替えできます（詳細は README の該当セクション参照）。
 
 ## 注意事項
-- **バケット名の一意性**：S3バケット名はグローバルに一意である必要があります。他のAWSアカウントやリージョンで同じ名前が使われているとエラーになります。
-- **リージョン設定**：このサンプルでは `ap-northeast-1` を使用していますが、必要に応じて変更可能です。
-- **CloudFront 反映待ち**：CloudFront への変更適用には数分かかる場合があります。出力されたドメイン名がすぐに有効にならないことがありますのでご注意ください。
-
-## リポジトリ構成
-```
-.
-├── main.tf            # S3 + CloudFront 構成のTerraformコード
-├── README.md          # このファイル
-└── .gitignore         # Terraform の状態ファイルなどを除外設定
-```
+- **バケット名の一意性**：S3 バケット名はグローバルに一意である必要があります。他の AWS アカウントやリージョンで同じ名前が使われているとエラーになります。
+- **ネームサーバ変更の反映**：レジストラでのネームサーバ更新は DNS TTL によって最大数時間かかることがあります。変更後は `dig NS don-blanc-co.com` などで確認してください。
+- **CloudFront 反映待ち**：CloudFront 設定変更の反映には数分かかる場合があります。すぐに独自ドメインでサイトが表示されなくても慌てず待機してください。
+- **IAM 権限**：Terraform 用ユーザーには S3, CloudFront, ACM, Route53 の操作に必要な権限が付与されていることを確認してください。
+- **Terraform Lock ファイル**：このリポジトリには `.terraform.lock.hcl` を含めているため、プロバイダバージョンが固定され、環境間の再現性が確保されます。
 
 ## 参考
 - [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest)
-- [Creating a Static Website Using a Custom Domain Name](https://docs.aws.amazon.com/AmazonS3/latest/userguide/WebsiteHosting.html)
-- [Configuring a CloudFront Origin for Amazon S3](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/DownloadDistS3AndCustomOrigins.html)
+- [AWS Certificate Manager – ACM](https://docs.aws.amazon.com/acm/latest/userguide/ca-overview.html)
+- [Create a Distribution by Using the CloudFront Console](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/distribution-web-creating-console.html)
+- [How do I configure Amazon S3 static website hosting with CloudFront?](https://aws.amazon.com/premiumsupport/knowledge-center/cloudfront-serve-static-website/)
+- [Hosting a Single-Page App (SPA) on Amazon S3 and CloudFront](https://aws.amazon.com/jp/blogs/compute/serving-a-single-page-application-with-amazon-s3-and-amazon-cloudfront/)
