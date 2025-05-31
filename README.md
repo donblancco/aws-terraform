@@ -1,11 +1,11 @@
 # aws-terraform
 
-このリポジトリには、don-blanc-co.com ドメインを使ってWebサイトをホスティングするためのAWS基盤（S3 + CloudFront + ACM + Route 53）をTerraformで構築するコードが含まれています。
+このリポジトリには、<var.domain_name>ドメインを使ってWebサイトをホスティングするためのAWS基盤（S3 + CloudFront + ACM + Route 53）をTerraformで構築するコードが含まれています。
 
 ## 構成概要
 - **S3バケット**：Reactアプリ（build ディレクトリ）の静的ホスティング、およびポートフォリオ用静的サイトのホスティング
 - **CloudFront**：CDN（コンテンツ配信）＋HTTPS化(ACM証明書)＋OAIによるアクセス制御
-- **ACM (AWS Certificate Manager)**：don-blanc-co.com および www.don-blanc-co.com で使用するSSL/TLS証明書の取得（DNS検証）
+- **ACM (AWS Certificate Manager)**：<var.domain_name> および <var.alternate_domain_name> で使用するSSL/TLS証明書の取得（DNS検証）
 - **Route 53**：ドメインのホストゾーン管理およびCloudFrontへのAliasレコード登録
 - **バケットポリシー**：CloudFront OAIからのみS3コンテンツを取得できるように制限
 - **パブリックアクセスブロック**：S3バケットへの直接アクセスを最小限にする制御
@@ -36,13 +36,13 @@ cd aws-terraform
 ```
 
 ### 1.5. 変数の設定
-`terraform.tfvars` ファイルに環境ごとの変数値を設定してください。例:
+`terraform.tfvars` ファイルに以下の変数値を設定してください（ドメインは変数 `domain_name` および `alternate_domain_name` を使用）:
 ```
 aws_region                        = "ap-northeast-1"
-bucket_name                       = "ソースコードを配置したバケット名"
-domain_name                       = "don-blanc-co.com"
-alternate_domain_name             = "www.don-blanc-co.com"
-certificate_subject_alternative_names = ["www.don-blanc-co.com"]
+bucket_name                       = "<your-s3-bucket-name>"
+domain_name                       = "<your-domain-name>"
+alternate_domain_name             = "<your-alternate-domain-name>"
+certificate_subject_alternative_names = ["<your-alternate-domain-name>"]
 ```
 
 ### 2. Terraform の初期化
@@ -68,7 +68,7 @@ Terraform は以下を順に実行します：
 6. **CloudFrontデフォルトディストリビューションにACM証明書とAliasを設定**
 7. **Route 53 に Aレコード（Alias）で CloudFront を向ける**
 
-以上が完了すると、`don-blanc-co.com` および `www.don-blanc-co.com` で HTTPS 接続が有効なWebサイトが公開されます。
+以上が完了すると、`<var.domain_name>` および `<var.alternate_domain_name>` で HTTPS 接続が有効なWebサイトが公開されます。
 
 
 ### 4. 出力されたサイトURLの確認
@@ -77,11 +77,7 @@ Terraform 実行後、以下コマンドで CloudFront のドメイン名を確�
 ```bash
 terraform output site_url
 ```
-例:
-```
-dkz59juhsa6rl.cloudfront.net
-```
-しばらく待つと、`https://don-blanc-co.com/` が 配信するようになります。
+terraform output site_url  で取得される CloudFront ドメイン (例: dkz59juhsa6rl.cloudfront.net) を確認し、`https://<var.domain_name>/` でアクセスしてください。
 
 ### 5. 後片付け (リソース削除)
 テスト目的や不要になった場合は、以下のコマンドで作成した AWS リソースをすべて削除できます。
@@ -98,7 +94,7 @@ terraform destroy
 
 ## 注意事項
 - **バケット名の一意性**：S3 バケット名はグローバルに一意である必要があります。他の AWS アカウントやリージョンで同じ名前が使われているとエラーになります。
-- **ネームサーバ変更の反映**：レジストラでのネームサーバ更新は DNS TTL によって最大数時間かかることがあります。変更後は `dig NS don-blanc-co.com` などで確認してください。
+- **ネームサーバ変更の反映**：レジストラでのネームサーバ更新は DNS TTL によって最大数時間かかることがあります。変更後は `dig NS <var.domain_name> @8.8.8.8 +short` などで確認してください。
 - **CloudFront 反映待ち**：CloudFront 設定変更の反映には数分かかる場合があります。すぐに独自ドメインでサイトが表示されなくても慌てず待機してください。
 - **IAM 権限**：Terraform 用ユーザーには S3, CloudFront, ACM, Route53 の操作に必要な権限が付与されていることを確認してください。
 - **Terraform Lock ファイル**：このリポジトリには `.terraform.lock.hcl` を含めているため、プロバイダバージョンが固定され、環境間の再現性が確保されます。
